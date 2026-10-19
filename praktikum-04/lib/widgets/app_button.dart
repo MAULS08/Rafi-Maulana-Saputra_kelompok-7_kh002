@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -18,33 +17,25 @@ class AppButton extends StatelessWidget {
     required this.borderRadius,
   });
 
-  Future<void> _openUrl() async {
+  Future<void> _launchUrl() async {
     final Uri uri = Uri.parse(url);
-
-    final bool launched = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-
-    if (!launched) {
-      throw Exception('Tidak dapat membuka URL: $url');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      throw Exception('Tidak dapat membuka URL $url');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity,
       height: height,
-      child: ElevatedButton.icon(
-        onPressed: _openUrl,
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _launchUrl,
         icon: Icon(icon),
-        label: Text(label),
-        style: ElevatedButton.styleFrom(
+        label: Text(label), // Text biasa tanpa properti style
+        style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(
-              borderRadius,
-            ),
+            borderRadius: BorderRadius.circular(borderRadius),
           ),
         ),
       ),
