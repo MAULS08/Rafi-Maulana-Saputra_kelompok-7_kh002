@@ -1,121 +1,334 @@
-import 'package:flutter/material.dart';
 
-void main() {
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   runApp(const MyApp());
 }
 
+// Function ini untuk membuat aplikasi dan mengatur tema.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      debugShowCheckedModeBanner: false,
+      title: 'Pencatatan Stok Barang',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+        ),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(),
     );
   }
 }
 
+// Function ini untuk menampilkan form pencatatan stok barang.
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  const MyHomePage({super.key});
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  final _formKey = GlobalKey<FormState>();
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  final namaController = TextEditingController();
+  final masukController = TextEditingController();
+  final keluarController = TextEditingController();
+  final kodeController = TextEditingController();
+  final stokController = TextEditingController();
+
+  bool sedangMenyimpan = false;
+
+  // Function ini untuk memvalidasi kode barang.
+  // NIM ganjil 20240801195: tiga digit terakhir adalah 195.
+  // Contoh kode: 123.195 (enam digit angka).
+  String? validasiKode(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Kode barang wajib diisi';
+    }
+
+    final kode = value.trim();
+    final pola = RegExp(r'^\d+\.\d+$');
+
+    if (!pola.hasMatch(kode)) {
+      return 'Gunakan format desimal, contoh 123.195';
+    }
+
+    final bagian = kode.split('.');
+    final jumlahDigit =
+        bagian[0].length + bagian[1].length;
+
+    if (jumlahDigit < 6) {
+      return 'Kode barang minimal 6 digit angka';
+    }
+
+    if (bagian[1].length != 3 ||
+        bagian[1] != '195') {
+      return 'Tiga digit desimal harus berakhir dengan 195';
+    }
+
+    if (double.tryParse(kode) == null) {
+      return 'Kode barang tidak valid';
+    }
+
+    return null;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+  // Function ini untuk memvalidasi jumlah stok.
+  String? validasiStok(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Jumlah stok wajib diisi';
+    }
+
+    final stok = int.tryParse(value.trim());
+
+    if (stok == null) {
+      return 'Jumlah stok harus bilangan bulat';
+    }
+
+    if (stok < 0) {
+      return 'Jumlah stok tidak boleh negatif';
+    }
+
+    return null;
+  }
+
+  // Function ini untuk menyimpan data ke Firestore.
+  Future<void> simpanBarang() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      sedangMenyimpan = true;
+    });
+
+    try {
+      final String nama = namaController.text.trim();
+      final String tanggalMasuk =
+      masukController.text.trim();
+      final String tanggalKeluar =
+      keluarController.text.trim();
+
+      // Konversi kode barang menjadi angka desimal.
+      final double kode =
+      double.parse(kodeController.text.trim());
+
+      // Konversi jumlah stok menjadi integer.
+      final int stok =
+      int.parse(stokController.text.trim());
+
+      await FirebaseFirestore.instance
+          .collection('stok_barang')
+          .add({
+        'nama_barang': nama,
+        'tanggal_masuk': tanggalMasuk,
+        'tanggal_keluar': tanggalKeluar,
+        'kode_barang': kode,
+        'jumlah_stok': stok,
+        'waktu': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+
+      // Kosongkan seluruh input setelah berhasil.
+      namaController.clear();
+      masukController.clear();
+      keluarController.clear();
+      kodeController.clear();
+      stokController.clear();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Barang berhasil disimpan!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyimpan barang: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          sedangMenyimpan = false;
+        });
+      }
+    }
+  }
+
+  // Function ini untuk membuat komponen input.
+  Widget buatField({
+    required String label,
+    required TextEditingController controller,
+    required String? Function(String?) validator,
+    TextInputType keyboard = TextInputType.text,
+    String? hint,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboard,
+        validator: validator,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          prefixIcon: const Icon(Icons.inventory_2_outlined),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+
+  // Function ini untuk membebaskan controller saat halaman ditutup.
+  @override
+  void dispose() {
+    namaController.dispose();
+    masukController.dispose();
+    keluarController.dispose();
+    kodeController.dispose();
+    stokController.dispose();
+    super.dispose();
+  }
+
+  // Function ini untuk menampilkan seluruh form aplikasi.
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Stok Barang'),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(
+                Icons.inventory_2,
+                size: 64,
+                color: Colors.deepPurple,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Form Pencatatan Stok Barang',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              buatField(
+                label: 'Nama Barang',
+                hint: 'Contoh: R - Buku Tulis',
+                controller: namaController,
+                validator: (value) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
+                    return 'Nama barang wajib diisi';
+                  }
+                  return null;
+                },
+              ),
+
+              buatField(
+                label: 'Tanggal Masuk Barang',
+                hint: 'Contoh: 16-10-2026',
+                controller: masukController,
+                validator: (value) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
+                    return 'Tanggal masuk wajib diisi';
+                  }
+                  return null;
+                },
+              ),
+
+              buatField(
+                label: 'Tanggal Keluar Barang',
+                hint: 'Contoh: 20-10-2026',
+                controller: keluarController,
+                validator: (value) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
+                    return 'Tanggal keluar wajib diisi';
+                  }
+                  return null;
+                },
+              ),
+
+              buatField(
+                label: 'Kode Barang',
+                hint: 'Contoh: 123.195',
+                controller: kodeController,
+                keyboard: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                validator: validasiKode,
+              ),
+
+              buatField(
+                label: 'Jumlah Stok',
+                hint: 'Contoh: 25',
+                controller: stokController,
+                keyboard: TextInputType.number,
+                validator: validasiStok,
+              ),
+
+              const SizedBox(height: 8),
+
+              SizedBox(
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: sedangMenyimpan
+                      ? null
+                      : simpanBarang,
+                  icon: sedangMenyimpan
+                      ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  )
+                      : const Icon(Icons.save),
+                  label: Text(
+                    sedangMenyimpan
+                        ? 'Menyimpan...'
+                        : 'Simpan Barang',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
